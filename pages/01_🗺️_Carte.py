@@ -1,16 +1,9 @@
 # ============================================================
-# GeoSat Kédougou — pages/01_🗺️_Carte.py
-# Page 1 : Carte interactive & détail des zones
-# ============================================================
-
-import streamlit as st
+# import streamlit as st
 import folium
 from streamlit_folium import st_folium
 import plotly.graph_objects as go
 import pandas as pd
-from datetime import datetime
-
-# ── Chargement données depuis session_state ──────────────────
 from utils.data_loader import load_zones, load_spectral_bands, load_ndvi_history
 from utils.scoring import rank_zones, generate_recommendation
 
@@ -22,205 +15,298 @@ if "zones" not in st.session_state:
 ZONES = st.session_state.zones
 
 TYPE_COLOR = {"aurifere":"#f59e0b","sterile":"#94a3b8","structure":"#38bdf8"}
-TYPE_LABEL = {"aurifere":"Anomalie Aurifère","sterile":"Zone Stérile","structure":"Structure Géologique"}
+TYPE_LABEL = {"aurifere":"Anomalie Aurifere","sterile":"Zone Sterile","structure":"Structure Geologique"}
+TYPE_ICON  = {"aurifere":"⬡","sterile":"○","structure":"◈"}
 PRIO_COLOR = {"HAUTE":"#f59e0b","MOYENNE":"#38bdf8","FAIBLE":"#94a3b8","NULLE":"#475569"}
-PLOTLY_THEME = dict(paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",
-                    font_color="#94a3b8",font_family="'Courier New',monospace",
-                    margin=dict(t=25,b=15,l=15,r=10))
 
 TILES = {
-    "🛰 Satellite ESRI": ("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}","ESRI"),
-    "🗺 OpenStreetMap":  ("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png","OSM"),
-    "🗻 OpenTopoMap":    ("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png","OTM"),
-    "🌑 Stadia Dark":    ("https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png","Stadia"),
+    "Satellite ESRI": ("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}","ESRI"),
+    "OpenStreetMap":  ("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png","OSM"),
+    "OpenTopoMap":    ("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png","OTM"),
 }
 
-# ── Sidebar filtres ──────────────────────────────────────────
 with st.sidebar:
-    st.markdown("### 🗺️ Carte & Zones")
-    st.markdown("---")
-
-    filtre_type = st.multiselect("Type de zone", ["aurifere","sterile","structure"],
+    st.markdown("### Carte & Zones")
+    filtre_type = st.multiselect("Type de zone",
+        ["aurifere","sterile","structure"],
         default=["aurifere","sterile","structure"],
         format_func=lambda x: TYPE_LABEL[x])
-
-    filtre_prio = st.multiselect("Priorité", ["HAUTE","MOYENNE","FAIBLE","NULLE"],
+    filtre_prio = st.multiselect("Priorite",
+        ["HAUTE","MOYENNE","FAIBLE","NULLE"],
         default=["HAUTE","MOYENNE","FAIBLE","NULLE"])
+    seuil = st.slider("Intensite minimale (%)", 0, 100, 0, 5)
+    tile_name = st.radio("Fond de carte", list(TILES.keys()))
+    show_labels = st.checkbox("Afficher les labels", True)
+    show_circles = st.checkbox("Afficher les cercles de rayon", False)
 
-    seuil = st.slider("Intensité minimale (%)", 0, 100, 0, 5)
-
-    st.markdown("---")
-    tile_name = st.radio("Fond de carte", list(TILES.keys()), label_visibility="collapsed")
-
-    st.markdown("---")
-    st.markdown("**Zones sélectionnées**")
-
-# ── Filtrage ─────────────────────────────────────────────────
 df = ZONES[
     ZONES.type.isin(filtre_type) &
     ZONES.priorite.isin(filtre_prio) &
     (ZONES.intensite >= seuil)
 ].copy()
 
-with st.sidebar:
-    st.metric("Zones affichées", len(df), f"{len(df)-len(ZONES)} vs total")
+st.markdown(f"## Carte Interactive — Kedougou ({len(df)} zones)")
 
-# ── Header ───────────────────────────────────────────────────
-st.markdown(f"""
-<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-  <div style="font-size:28px;">🗺️</div>
-  <div>
-    <div style="font-family:'Oxanium',sans-serif;font-size:18px;font-weight:700;
-                color:#f59e0b;letter-spacing:2px;">CARTE INTERACTIVE</div>
-    <div style="font-size:9px;color:rgba(255,255,255,.3);letter-spacing:1.5px;">
-      RÉGION DE KÉDOUGOU — {len(df)} ZONES AFFICHÉES
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ── Layout ───────────────────────────────────────────────────
 col_map, col_detail = st.columns([3, 2], gap="medium")
 
-# ═══ CARTE FOLIUM ═══════════════════════════════════════════
 with col_map:
     tile_url, tile_attr = TILES[tile_name]
-    m = folium.Map(location=[12.72,-12.15], zoom_start=10,
-                   tiles=tile_url, attr=tile_attr, control_scale=True)
+    m = folium.Map(
+        location=[12.72, -12.15],
+        zoom_start=10,
+        tiles=tile_url,
+        attr=tile_attr,
+        control_scale=True,
+    )
+
+    # Groupes par type
+    group_aurifere  = folium.FeatureGroup(name="Anomalies Auriferes")
+    group_sterile   = folium.FeatureGroup(name="Zones Steriles")
+    group_structure = folium.FeatureGroup(name="Structures Geologiques")
+
+    groups = {
+        "aurifere":  group_aurifere,
+        "sterile":   group_sterile,
+        "structure": group_structure,
+    }
 
     for _, z in df.iterrows():
-        c  = TYPE_COLOR[z.type]
-        r  = 8 + int(z.intensite / 12)
-        popup = f"""
-        <div style='font-family:monospace;font-size:11px;background:#0d1f35;
-                    color:#e2e8f0;padding:10px;border-radius:6px;min-width:190px;'>
-          <b style='color:{c};font-size:13px;'>{z.nom}</b><br>
-          <span style='color:#888;font-size:10px;'>{TYPE_LABEL[z.type]}</span>
-          <hr style='margin:5px 0;border-color:rgba(255,255,255,.1);'>
-          <table style='width:100%;font-size:10px;'>
-            <tr><td style='color:#888'>Intensité</td><td><b style='color:{c}'>{z.intensite}%</b></td></tr>
-            <tr><td style='color:#888'>Score IA</td><td><b>{z.score_ia}/100</b></td></tr>
-            <tr><td style='color:#888'>Surface</td><td>{z.surface} km²</td></tr>
-            <tr><td style='color:#888'>Priorité</td>
-                <td><b style='color:{PRIO_COLOR[z.priorite]}'>{z.priorite}</b></td></tr>
-            <tr><td style='color:#888'>NDVI</td><td>{z.ndvi}</td></tr>
-            <tr><td style='color:#888'>SWIR ratio</td><td>{z.band_ratio}</td></tr>
+        c     = TYPE_COLOR[z.type]
+        r     = 8 + int(z.intensite / 12)
+        group = groups[z.type]
+
+        # Popup riche
+        popup_html = f"""
+        <div style='font-family:monospace;font-size:12px;min-width:200px;
+                    background:#0d1f35;color:#e2e8f0;padding:12px;border-radius:8px;
+                    border:2px solid {c};'>
+          <div style='font-size:15px;font-weight:bold;color:{c};margin-bottom:4px;'>
+            {TYPE_ICON[z.type]} {z.nom}
+          </div>
+          <div style='font-size:10px;color:#888;margin-bottom:8px;
+                      padding:2px 6px;background:rgba(255,255,255,0.05);
+                      border-radius:4px;display:inline-block;'>
+            {TYPE_LABEL[z.type]}
+          </div>
+          <hr style='border-color:rgba(255,255,255,0.1);margin:6px 0;'>
+          <table style='width:100%;font-size:11px;border-collapse:collapse;'>
+            <tr style='border-bottom:1px solid rgba(255,255,255,0.05);'>
+              <td style='color:#888;padding:3px 0;'>Intensite</td>
+              <td style='color:{c};font-weight:bold;'>{z.intensite}%</td>
+            </tr>
+            <tr style='border-bottom:1px solid rgba(255,255,255,0.05);'>
+              <td style='color:#888;padding:3px 0;'>Score IA</td>
+              <td style='color:#fff;font-weight:bold;'>{z.score_ia}/100</td>
+            </tr>
+            <tr style='border-bottom:1px solid rgba(255,255,255,0.05);'>
+              <td style='color:#888;padding:3px 0;'>Priorite</td>
+              <td style='color:{PRIO_COLOR[z.priorite]};font-weight:bold;'>{z.priorite}</td>
+            </tr>
+            <tr style='border-bottom:1px solid rgba(255,255,255,0.05);'>
+              <td style='color:#888;padding:3px 0;'>Surface</td>
+              <td style='color:#fff;'>{z.surface} km2</td>
+            </tr>
+            <tr style='border-bottom:1px solid rgba(255,255,255,0.05);'>
+              <td style='color:#888;padding:3px 0;'>NDVI</td>
+              <td style='color:#fff;'>{z.ndvi}</td>
+            </tr>
+            <tr style='border-bottom:1px solid rgba(255,255,255,0.05);'>
+              <td style='color:#888;padding:3px 0;'>Ratio SWIR</td>
+              <td style='color:#fff;'>{z.band_ratio}</td>
+            </tr>
+            <tr>
+              <td style='color:#888;padding:3px 0;'>Mineraux</td>
+              <td style='color:#fff;font-size:10px;'>{z.mineraux}</td>
+            </tr>
           </table>
-          <div style='margin-top:5px;font-size:9px;color:#666;font-style:italic;'>{z.structure}</div>
-        </div>"""
+          <div style='margin-top:8px;font-size:9px;color:#666;font-style:italic;'>
+            {z.structure}
+          </div>
+          <div style='margin-top:4px;font-size:9px;color:#666;'>
+            {z.lat}N / {abs(z.lng):.2f}O
+          </div>
+        </div>
+        """
+
+        # Marqueur principal
         folium.CircleMarker(
-            [z.lat, z.lng], radius=r, color=c, fill=True,
-            fill_color=c, fill_opacity=0.55, weight=2,
-            popup=folium.Popup(popup, max_width=220),
-            tooltip=folium.Tooltip(f"<b style='color:{c}'>{z.nom}</b> — {z.intensite}%"),
-        ).add_to(m)
+            location=[z.lat, z.lng],
+            radius=r,
+            color=c,
+            fill=True,
+            fill_color=c,
+            fill_opacity=0.6,
+            weight=2.5,
+            popup=folium.Popup(popup_html, max_width=240),
+            tooltip=folium.Tooltip(
+                f"<b style='color:{c}'>{TYPE_ICON[z.type]} {z.nom}</b><br>"
+                f"<span style='font-size:10px'>{TYPE_LABEL[z.type]}</span><br>"
+                f"Intensite: <b>{z.intensite}%</b> | Score: <b>{z.score_ia}</b>",
+                sticky=True,
+            ),
+        ).add_to(group)
 
-    # Légende
-    legend = """
-    <div style='position:fixed;bottom:20px;left:20px;z-index:1000;
-                background:rgba(7,17,29,.92);border:1px solid rgba(245,158,11,.25);
-                border-radius:8px;padding:10px 14px;font-family:monospace;font-size:11px;'>
-      <div style='color:#f59e0b;font-weight:bold;margin-bottom:6px;font-size:10px;'>⬡ LÉGENDE</div>
-      <div><span style='color:#f59e0b'>●</span>&nbsp;Anomalie Aurifère</div>
-      <div><span style='color:#94a3b8'>●</span>&nbsp;Zone Stérile</div>
-      <div><span style='color:#38bdf8'>●</span>&nbsp;Structure Géologique</div>
-      <div style='margin-top:5px;font-size:9px;color:#666;'>Taille ∝ Intensité</div>
-    </div>"""
-    m.get_root().html.add_child(folium.Element(legend))
+        # Label texte sur la carte
+        if show_labels:
+            folium.Marker(
+                location=[z.lat + 0.012, z.lng],
+                icon=folium.DivIcon(
+                    html=f"""
+                    <div style='
+                        font-family:monospace;
+                        font-size:10px;
+                        font-weight:bold;
+                        color:{c};
+                        background:rgba(7,17,29,0.85);
+                        border:1px solid {c};
+                        border-radius:4px;
+                        padding:2px 6px;
+                        white-space:nowrap;
+                        box-shadow:0 2px 6px rgba(0,0,0,0.5);
+                    '>
+                        {TYPE_ICON[z.type]} {z.nom}
+                    </div>
+                    """,
+                    icon_size=(160, 22),
+                    icon_anchor=(80, 22),
+                ),
+            ).add_to(group)
 
-    map_data = st_folium(m, width=None, height=480, returned_objects=[])
+        # Cercle de rayon (optionnel)
+        if show_circles:
+            radius_m = int(z.surface * 500)
+            folium.Circle(
+                location=[z.lat, z.lng],
+                radius=radius_m,
+                color=c,
+                fill=True,
+                fill_color=c,
+                fill_opacity=0.08,
+                weight=1,
+                dash_array="5",
+            ).add_to(group)
 
-# ═══ DÉTAIL ZONE ════════════════════════════════════════════
+    # Ajout des groupes à la carte
+    group_aurifere.add_to(m)
+    group_sterile.add_to(m)
+    group_structure.add_to(m)
+
+    # Controle des couches
+    folium.LayerControl(
+        position="topright",
+        collapsed=False,
+    ).add_to(m)
+
+    # Legende
+    legend_html = f"""
+    <div style='
+        position:fixed;bottom:30px;left:30px;z-index:1000;
+        background:rgba(7,17,29,0.95);
+        border:1px solid rgba(245,158,11,0.3);
+        border-radius:10px;padding:14px 18px;
+        font-family:monospace;font-size:12px;color:#e2e8f0;
+        box-shadow:0 4px 20px rgba(0,0,0,0.5);
+    '>
+        <div style='color:#f59e0b;font-weight:bold;margin-bottom:10px;
+                    font-size:11px;letter-spacing:2px;'>LEGENDE</div>
+        <div style='display:flex;align-items:center;gap:8px;margin:6px 0;'>
+            <div style='width:14px;height:14px;border-radius:50%;
+                        background:#f59e0b;border:2px solid #f59e0b;'></div>
+            <span>Anomalie Aurifere</span>
+        </div>
+        <div style='display:flex;align-items:center;gap:8px;margin:6px 0;'>
+            <div style='width:14px;height:14px;border-radius:50%;
+                        background:#94a3b8;border:2px solid #94a3b8;'></div>
+            <span>Zone Sterile</span>
+        </div>
+        <div style='display:flex;align-items:center;gap:8px;margin:6px 0;'>
+            <div style='width:14px;height:14px;border-radius:50%;
+                        background:#38bdf8;border:2px solid #38bdf8;'></div>
+            <span>Structure Geologique</span>
+        </div>
+        <div style='margin-top:10px;padding-top:8px;
+                    border-top:1px solid rgba(255,255,255,0.1);
+                    font-size:9px;color:#666;'>
+            Taille cercle = Intensite anomalie<br>
+            Cliquez sur un point pour details
+        </div>
+    </div>
+    """
+    m.get_root().html.add_child(folium.Element(legend_html))
+
+    st_folium(m, width=None, height=520, returned_objects=[])
+
 with col_detail:
-    st.markdown("<div class='sec-title'>DÉTAIL DE LA ZONE</div>", unsafe_allow_html=True)
-
-    zone_nom = st.selectbox("Sélectionner une zone", df.nom.tolist(),
-                             label_visibility="collapsed")
+    st.markdown("### Detail Zone")
+    zone_nom = st.selectbox("Selectionner", df.nom.tolist())
     z = df[df.nom == zone_nom].iloc[0]
     c = TYPE_COLOR[z.type]
 
-    # Badge header
     st.markdown(f"""
-    <div style='padding:12px;border-radius:8px;background:rgba(245,158,11,.06);
-                border:1px solid rgba(245,158,11,.2);margin-bottom:12px;'>
-      <div style='font-size:8px;color:{c};letter-spacing:2px;margin-bottom:3px;'>
-        {TYPE_LABEL[z.type].upper()}
-      </div>
-      <div style='font-family:"Oxanium",sans-serif;font-size:16px;font-weight:700;
-                  color:#f1f5f9;margin-bottom:6px;'>{z.nom}</div>
-      <span class="badge badge-{z.priorite.lower()}">● {z.priorite} PRIORITÉ</span>
-      <span class="badge" style="background:rgba(255,255,255,.05);color:rgba(255,255,255,.5);
-            border:1px solid rgba(255,255,255,.1);">{z.surface} km²</span>
-      <span class="badge" style="background:rgba(255,255,255,.05);color:rgba(255,255,255,.5);
-            border:1px solid rgba(255,255,255,.1);">Score: {z.score_ia}/100</span>
+    <div style='padding:12px;border-radius:8px;
+                background:rgba(255,255,255,0.03);
+                border:2px solid {c};margin-bottom:12px;'>
+      <div style='font-size:9px;color:{c};letter-spacing:2px;'>{TYPE_LABEL[z.type].upper()}</div>
+      <div style='font-size:17px;font-weight:bold;color:#f1f5f9;margin:4px 0;'>{z.nom}</div>
+      <span style='font-size:10px;padding:2px 8px;border-radius:10px;
+                   background:{PRIO_COLOR[z.priorite]}22;color:{PRIO_COLOR[z.priorite]};
+                   border:1px solid {PRIO_COLOR[z.priorite]}44;'>
+        {z.priorite} PRIORITE
+      </span>
     </div>
     """, unsafe_allow_html=True)
 
-    # Métriques
     c1, c2, c3 = st.columns(3)
-    c1.metric("Intensité",  f"{z.intensite}%")
-    c2.metric("Confiance",  f"{z.confiance}%")
-    c3.metric("NDVI",       f"{z.ndvi:.2f}")
+    c1.metric("Intensite",   f"{z.intensite}%")
+    c2.metric("Score IA",    f"{z.score_ia}")
+    c3.metric("Confiance",   f"{z.confiance}%")
+
     c4, c5, c6 = st.columns(3)
-    c4.metric("Altération", f"{z.alteration}%")
+    c4.metric("Alteration",  f"{z.alteration}%")
     c5.metric("Hydrothermal",f"{z.hydrothermal}%")
-    c6.metric("Faille",     f"{z.faille_dist} km")
+    c6.metric("Faille",      f"{z.faille_dist}km")
 
-    # Info géo
-    st.markdown("<br>", unsafe_allow_html=True)
-    for label, val in [
-        ("Structure géologique", z.structure),
-        ("Ratio SWIR B11/B12",   str(z.band_ratio)),
-        ("Coordonnées",          f"{z.lat}°N / {abs(z.lng):.2f}°O"),
-        ("Score IA",             f"{z.score_ia} / 100"),
-    ]:
-        st.markdown(f"""
-        <div class="info-row">
-          <span class="info-key">{label}</span>
-          <span class="info-val">{val}</span>
-        </div>""", unsafe_allow_html=True)
+    st.markdown("**Structure**")
+    st.info(z.structure)
 
-    # Minéraux
-    st.markdown("<br><div class='sec-title'>MINÉRAUX DÉTECTÉS</div>", unsafe_allow_html=True)
-    for m_ in z.mineraux.split(", "):
-        st.markdown(f"<span class='badge badge-{z.type}'>{m_}</span>",
-                    unsafe_allow_html=True)
+    st.markdown("**Mineraux detectes**")
+    for mineral in z.mineraux.split(", "):
+        st.markdown(f"<span style='background:{c}22;color:{c};border:1px solid {c}44;"
+                    f"padding:2px 8px;border-radius:4px;margin:2px;display:inline-block;"
+                    f"font-size:11px;'>{mineral}</span>", unsafe_allow_html=True)
 
-    # Recommandation IA
-    st.markdown("<br><div class='sec-title'>RECOMMANDATION IA</div>", unsafe_allow_html=True)
+    st.markdown("**Recommandation IA**")
     reco = generate_recommendation(z)
-    st.markdown(f"""
-    <div style='padding:10px;border-radius:6px;background:rgba(255,255,255,.02);
-                border:1px solid rgba(255,255,255,.06);font-size:10px;
-                color:rgba(255,255,255,.55);line-height:1.6;'>{reco}</div>
-    """, unsafe_allow_html=True)
-
-    # Radar chart
-    st.markdown("<br><div class='sec-title'>PROFIL MULTIDIMENSIONNEL</div>",
+    st.markdown(f"<div style='font-size:10px;color:rgba(255,255,255,0.6);"
+                f"padding:10px;border-radius:6px;background:rgba(255,255,255,0.03);"
+                f"border:1px solid {c}33;line-height:1.6;'>{reco}</div>",
                 unsafe_allow_html=True)
-    cats = ["Altération","Confiance","Intensité","Hydrothermal","SWIR","Prox.Faille"]
+
+    # Radar
+    cats = ["Alteration","Confiance","Intensite","Hydrothermal","SWIR","Score"]
     vals = [z.alteration, z.confiance, z.intensite, z.hydrothermal,
-            round((z.band_ratio/3.5)*100),
-            max(0, round(100 - z.faille_dist * 15))]
+            round((z.band_ratio/3.5)*100), z.score_ia]
     fig = go.Figure(go.Scatterpolar(
         r=vals+[vals[0]], theta=cats+[cats[0]], fill="toself",
         fillcolor=f"rgba({int(c[1:3],16)},{int(c[3:5],16)},{int(c[5:7],16)},0.18)",
-        line=dict(color=c, width=2), name=z.nom,
+        line=dict(color=c, width=2),
     ))
-    fig.update_layout(**PLOTLY_THEME, height=240,
-        polar=dict(bgcolor="rgba(0,0,0,0)",
-            radialaxis=dict(visible=True,range=[0,100],
-                gridcolor="rgba(255,255,255,.06)",tickfont_size=7),
-            angularaxis=dict(gridcolor="rgba(255,255,255,.06)",tickfont_size=9)),
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        height=250, margin=dict(t=20,b=10,l=10,r=10),
+        polar=dict(
+            bgcolor="rgba(0,0,0,0)",
+            radialaxis=dict(visible=True, range=[0,100],
+                gridcolor="rgba(255,255,255,0.06)", tickfont_size=7),
+            angularaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont_size=9),
+        ),
     )
     st.plotly_chart(fig, use_container_width=True)
 
-# ── Tableau récap ────────────────────────────────────────────
 st.markdown("---")
-st.markdown("<div class='sec-title'>TABLEAU RÉCAPITULATIF DES ZONES</div>",
-            unsafe_allow_html=True)
-disp = df[["nom","type","priorite","score_ia","intensite","confiance",
-           "surface","ndvi","alteration","hydrothermal","faille_dist"]].copy()
-disp.columns = ["Zone","Type","Priorité","Score IA","Intensité %","Confiance %",
-                "Surface km²","NDVI","Altération %","Hydrothermal %","Faille km"]
+st.markdown("### Tableau des zones")
+disp = df[["nom","type","priorite","score_ia","intensite",
+           "surface","ndvi","alteration","structure"]].copy()
+disp.columns = ["Zone","Type","Priorite","Score IA","Intensite %",
+                "Surface km2","NDVI","Alteration %","Structure"]
 st.dataframe(disp, use_container_width=True, hide_index=True)
