@@ -19,9 +19,9 @@ TYPE_ICON  = {"aurifere":"*","sterile":"o","structure":"#"}
 PRIO_COLOR = {"HAUTE":"#f59e0b","MOYENNE":"#38bdf8","FAIBLE":"#94a3b8","NULLE":"#475569"}
 
 TILES = {
-    "Satellite ESRI": ("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}","ESRI"),
-    "OpenStreetMap":  ("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png","OSM"),
-    "OpenTopoMap":    ("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png","OTM"),
+    "Satellite ESRI": ("Esri.WorldImagery", "ESRI"),
+    "OpenStreetMap":  ("OpenStreetMap", "OSM"),
+    "OpenTopoMap":    ("OpenTopoMap", "OTM"),
 }
 
 with st.sidebar:
@@ -49,13 +49,13 @@ col_map, col_detail = st.columns([3, 2], gap="medium")
 
 with col_map:
     tile_url, tile_attr = TILES[tile_name]
-    m = folium.Map(
+   m = folium.Map(
         location=[12.72, -12.15],
         zoom_start=10,
         tiles=tile_url,
-        attr=tile_attr,
         control_scale=True,
     )
+    
 
     group_aurifere  = folium.FeatureGroup(name="Anomalies Auriferes")
     group_sterile   = folium.FeatureGroup(name="Zones Steriles")
