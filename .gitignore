@@ -1,0 +1,77 @@
+# ============================================================
+# GeoSat Kédougou — .gitignore
+# ============================================================
+
+# Environnements Python
+venv/
+env/
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Variables d'environnement (NE JAMAIS COMMITER)
+.env
+*.env.local
+
+# Données brutes satellites (trop volumineuses)
+data/raw/*.tif
+data/raw/*.TIF
+data/raw/*.jp2
+data/raw/*.hdf
+data/raw/*.h5
+data/raw/*.nc
+data/raw/*.zip
+data/raw/*.tar.gz
+
+# Shapefiles (commiter uniquement le README)
+data/shapefiles/*.shp
+data/shapefiles/*.dbf
+data/shapefiles/*.shx
+data/shapefiles/*.prj
+data/shapefiles/*.cpg
+
+# Exports générés
+exports/*.pdf
+exports/*.xlsx
+exports/*.csv
+!exports/.gitkeep
+
+# Modèles ML volumineux
+models/*.joblib
+models/*.pkl
+models/*.h5
+models/*.pt
+!models/README.md
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Streamlit cache
+.streamlit/
+__pycache__/
+
+# Logs
+*.log
+logs/
+
+# Clés API et certificats
+*.json
+!package.json
+*.pem
+*.key
+gee_key.json

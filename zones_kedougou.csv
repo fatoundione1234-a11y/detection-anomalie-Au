@@ -1,0 +1,8 @@
+id,nom,type,lat,lng,intensite,surface,ndvi,band_ratio,structure,mineraux,confiance,priorite,alteration,faille_dist,hydrothermal
+1,Falémé Nord,aurifere,12.85,-12.18,92,14.2,-0.12,3.21,Cisaillement NE-SW,"Limonite, Goethite, Or natif",94,HAUTE,88,0.4,91
+2,Sabodala Est,sterile,12.71,-11.97,28,8.7,0.18,1.42,Intrusion granitique,"Quartz, Feldspath, Mica",78,FAIBLE,22,4.2,15
+3,Dinguiraye,structure,12.63,-12.34,78,22.1,0.05,2.87,Faille régionale NNE,"Pyrite, Arsenopyrite, Chlorite",86,MOYENNE,74,0.1,68
+4,Tomboronkoto,aurifere,12.58,-12.06,88,18.4,-0.08,3.05,Anticlinal E-W,"Or, Pyrite, Chalcopyrite",91,HAUTE,85,0.6,87
+5,Kédougou Centre,sterile,12.55,-12.19,18,5.3,0.34,1.12,Plaine alluviale,"Argile, Sable, Limon",88,NULLE,8,6.1,5
+6,Dorsale Mako,structure,12.87,-11.78,71,31.6,0.09,2.64,Série volcanique,"Basalte, Épidote, Chlorite",82,MOYENNE,65,1.2,62
+7,Bransan Ouest,aurifere,12.78,-12.45,83,11.8,-0.06,2.95,Zone de cisaillement,"Or, Scheelite, Malachite",89,HAUTE,80,0.3,84

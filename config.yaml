@@ -1,0 +1,83 @@
+# ============================================================
+# GeoSat Kédougou — Configuration générale
+# ============================================================
+
+app:
+  title: "GeoSat Kédougou"
+  subtitle: "Détection d'Anomalies Aurifères — Imagerie Satellitaire"
+  version: "2.0.0"
+  region: "Kédougou, Sénégal Oriental"
+  langue: "fr"
+
+map:
+  center_lat: 12.72
+  center_lng: -12.15
+  default_zoom: 10
+  min_zoom: 7
+  max_zoom: 18
+  default_layer: "satellite"  # satellite | osm | topo | dark
+
+satellite:
+  source: "sentinel-2"          # sentinel-2 | landsat-9 | both
+  cloud_cover_max: 20           # % couverture nuageuse maximale
+  date_start: "2024-01-01"
+  date_end: "2024-12-31"
+  bands_sentinel2:
+    - B1   # Coastal aerosol (443nm)
+    - B2   # Blue (490nm)
+    - B3   # Green (560nm)
+    - B4   # Red (665nm)
+    - B5   # Red Edge 1 (705nm)
+    - B6   # Red Edge 2 (740nm)
+    - B7   # Red Edge 3 (783nm)
+    - B8   # NIR (842nm)
+    - B8A  # Red Edge 4 (865nm)
+    - B11  # SWIR 1 (1610nm)
+    - B12  # SWIR 2 (2190nm)
+
+scoring:
+  weights:
+    intensite:    0.30
+    hydrothermal: 0.25
+    alteration:   0.20
+    faille_dist:  0.15
+    band_ratio:   0.10
+  seuils:
+    haute_priorite:  80
+    moyenne_priorite: 55
+    faible_priorite:  30
+
+indices:
+  ndvi:
+    formula: "(B8 - B4) / (B8 + B4)"
+    range: [-1, 1]
+    seuil_alteration: 0.1  # NDVI < 0.1 => sol dénudé/altéré
+  swir_ratio:
+    formula: "B11 / B12"
+    seuil_alteration: 2.5  # ratio > 2.5 => altération hydrothermale
+  clay_index:
+    formula: "B11 / B8"
+  ferrous_oxide:
+    formula: "B11 / B8A"
+  gossan_index:
+    formula: "B4 / B2"
+
+export:
+  pdf:
+    orientation: "portrait"
+    format: "A4"
+    auteur_defaut: "GeoSat Kédougou"
+  excel:
+    feuilles:
+      - "Zones"
+      - "Spectral"
+      - "NDVI"
+      - "Scoring"
+
+paths:
+  data_raw:       "data/raw/"
+  data_processed: "data/processed/"
+  shapefiles:     "data/shapefiles/"
+  models:         "models/"
+  exports:        "exports/"
+  assets:         "assets/"
